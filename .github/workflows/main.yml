@@ -31,12 +31,15 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      # 修复点 1：v3 升级为 v4，彻底解决 'tools' 找不到的报错
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install required Android SDK packages
         run: |
-          sdkmanager --licenses
+          # 修复点 2：加上 yes | 自动同意协议，防止 CI 卡死
+          yes | sdkmanager --licenses
+          # 注意：这里的 NDK 版本建议核对一下，如果报错找不到，请改成你项目实际需要的版本（比如 27.1.12297006）
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;29.0.14206865"
 
       - name: Validate signing secrets
