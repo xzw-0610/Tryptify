@@ -1,7 +1,7 @@
-name: Build signed APK
+name: Build Debug APK (Personal Use)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许你手动点击运行
   push:
     tags:
       - 'v*'
@@ -10,13 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  build-release:
-    name: Build signed release APK
+  build-debug:
+    name: Build debug APK
     runs-on: ubuntu-latest
-    env:
-      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Check out source
@@ -31,56 +27,23 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      # 修复点 1：v3 升级为 v4，彻底解决 'tools' 找不到的报错
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
       - name: Install required Android SDK packages
         run: |
-          # 修复点 2：加上 yes | 自动同意协议，防止 CI 卡死
           yes | sdkmanager --licenses
-          # 注意：这里的 NDK 版本建议核对一下，如果报错找不到，请改成你项目实际需要的版本（比如 27.1.12297006）
+          # 如果这里 ndk 版本报错，请改成你项目 gradle 里实际使用的版本
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;29.0.14206865"
 
-      - name: Validate signing secrets
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing required GitHub Actions secret: $name" >&2
-              exit 1
-            fi
-          done
+      # 直接打包 Debug 版本，无需任何签名配置
+      - name: Build debug APK
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
-      - name: Restore release keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/tryptify-release.keystore"
-          cat > "$GITHUB_WORKSPACE/keystore.properties" <<EOF
-          storeFile=$GITHUB_WORKSPACE/tryptify-release.keystore
-          storePassword=$KEYSTORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
-          chmod 600 "$GITHUB_WORKSPACE/tryptify-release.keystore" "$GITHUB_WORKSPACE/keystore.properties"
-
-      - name: Build signed release APK
-        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease
-
-      - name: Verify APK signature
-        run: |
-          set -euo pipefail
-          APK="app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
-
-      - name: Upload signed APK
+      # 上传打好的 APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: tryptify-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: tryptify-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
